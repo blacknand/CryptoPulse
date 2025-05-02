@@ -17,12 +17,15 @@ class MLStrategy(IStrategy):
         return dataframe
 
     def calculate_rsi(self, prices: pd.Series, period: int) -> pd.Series:
+        # Calculate RSI over a 14 period window
         delta = prices.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        # Forumla = RSI = 100 - (100 / (1 + RS)) where RS = (Average Gain / Average Loss)
         rs = gain / loss
         return 100 - (100 / (1 + rs))
 
+    # Generate buy signals usign Random Forest
     def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
         # Prepare features and target
         features = dataframe[['open', 'high', 'low', 'close', 'ma7', 'ma21', 'rsi']].dropna()
