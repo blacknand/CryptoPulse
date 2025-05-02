@@ -1,0 +1,46 @@
+from freqtrade.strategy import IStrategy
+from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+import numpy as np
+
+class MLStrategy(IStrategy):
+    INTERFACE_VERSION = 3
+    minimal_roi = {"0": 0.01}  # 1% ROI
+    stoploss = -0.05  # 5% stop-loss
+    timeframe = "1h"
+
+    def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+        # Add technical indicators
+        dataframe['ma7'] = dataframe['close'].rolling(window=7).mean()
+        dataframe['ma21'] = dataframe['close'].rolling(window=21).mean()
+        dataframe['rsi'] = self.calculate_rsi(dataframe['close'], 14)
+        return dataframe
+
+    def calculate_rsi(self, prices: pd.Series, period: int) -> pd.Series:
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+        # Prepare features and target
+        features = dataframe[['open', 'high', 'low', 'close', 'ma7', 'ma21', 'rsi']].dropna()
+        if len(features) < 50:  # Ensure enough data
+            dataframe['enter_long'] = 0
+            return dataframe
+
+        X = features.values[:-1]
+        y = (dataframe['close'].shift(-1) > dataframe['close']).astype(int).values[:-1]
+        
+        if len(X) > 10:
+            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            model.fit(X, y)
+            prediction = model.predict([features.values[-1]])[0]
+            dataframe.loc[dataframe.index[-1], 'enter_long'] = 1 if prediction == 1 else 0
+        return dataframe
+
+    def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+        # Exit if price drops below MA7
+        dataframe['exit_long'] = np.where(dataframe['close'] < dataframe['ma7'], 1, 0)
+        return dataframe
