@@ -33,14 +33,18 @@ class MLStrategy(IStrategy):
             dataframe['enter_long'] = 0
             return dataframe
 
-        X = features.values[:-1]
-        y = (dataframe['close'].shift(-1) > dataframe['close']).astype(int).values[:-1]
+        # Align X and y using the features dataframe
+        X = features[['open', 'high', 'low', 'close', 'ma7', 'ma21', 'rsi']].values[:-1]
+        y = (features['close'].shift(-1) > features['close']).astype(int).values[:-1]
         
         if len(X) > 10:
             model = RandomForestClassifier(n_estimators=100, random_state=42)
             model.fit(X, y)
             prediction = model.predict([features.values[-1]])[0]
             dataframe.loc[dataframe.index[-1], 'enter_long'] = 1 if prediction == 1 else 0
+        else:
+            dataframe['enter_long'] = 0
+
         return dataframe
 
     def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
